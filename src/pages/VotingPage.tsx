@@ -8,6 +8,7 @@ import { User, Idea, VotingSession } from '@/types/user';
 import IdeaCard from '@/components/IdeaCard';
 import VotingTimer from '@/components/VotingTimer';
 import UserSearch from '@/components/UserSearch';
+import { supabase } from '@/lib/supabase';
 import { toast } from 'sonner';
 
 interface VotingPageProps {
@@ -20,7 +21,7 @@ interface VotingPageProps {
 
 const VotingPage = ({ user, ideas, onVote, onLogout, onShowLeaderboard }: VotingPageProps) => {
   const [session, setSession] = useState<VotingSession>({
-    id: '1',
+    id: 'default',
     isActive: false,
     timeRemaining: 60,
     totalDuration: 60,
@@ -32,6 +33,65 @@ const VotingPage = ({ user, ideas, onVote, onLogout, onShowLeaderboard }: Voting
   const votableIdeas = ideas.filter(idea => idea.authorId !== user.id);
   const totalVotes = ideas.reduce((sum, idea) => sum + idea.votes, 0);
   const activeVoters = new Set(ideas.flatMap(idea => idea.voters)).size;
+
+  useEffect(() => {
+    // Load voting session from Supabase
+    loadVotingSession();
+
+    // Set up real-time subscription for voting session updates
+    const sessionSubscription = supabase
+      .channel('voting_session_changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'voting_sessions',
+          filter: 'id=eq.default'
+        },
+        (payload) => {
+          console.log('Session update:', payload);
+          if (payload.new) {
+            setSession({
+              id: payload.new.id,
+              isActive: payload.new.is_active,
+              timeRemaining: payload.new.time_remaining,
+              totalDuration: payload.new.total_duration,
+              hasEnded: payload.new.has_ended,
+            });
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      sessionSubscription.unsubscribe();
+    };
+  }, []);
+
+  const loadVotingSession = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('voting_sessions')
+        .select('*')
+        .eq('id', 'default')
+        .single();
+
+      if (error) throw error;
+
+      if (data) {
+        setSession({
+          id: data.id,
+          isActive: data.is_active,
+          timeRemaining: data.time_remaining,
+          totalDuration: data.total_duration,
+          hasEnded: data.has_ended,
+        });
+      }
+    } catch (error) {
+      console.error('Error loading voting session:', error);
+    }
+  };
 
   const handleVote = (ideaId: string) => {
     if (!session.isActive) {
@@ -47,17 +107,63 @@ const VotingPage = ({ user, ideas, onVote, onLogout, onShowLeaderboard }: Voting
     onVote(ideaId, selectedUser);
   };
 
-  const startVoting = () => {
-    setSession(prev => ({ ...prev, isActive: true, timeRemaining: 60 }));
-    toast.success('Voting session started! You have 60 seconds to vote.');
+  const startVoting = async () => {
+    try {
+      const { error } = await supabase
+        .from('voting_sessions')
+        .update({
+          is_active: true,
+          time_remaining: 60,
+          has_ended: false
+        })
+        .eq('id', 'default');
+
+      if (error) throw error;
+
+      toast.success('Voting session started! You have 60 seconds to vote.');
+    } catch (error) {
+      console.error('Error starting voting session:', error);
+      toast.error('Failed to start voting session');
+    }
   };
 
-  const onTimerComplete = () => {
-    setSession(prev => ({ ...prev, isActive: false, hasEnded: true }));
-    toast.info('Voting session ended!');
-    setTimeout(() => {
-      onShowLeaderboard();
-    }, 2000);
+  const onTimerComplete = async () => {
+    try {
+      const { error } = await supabase
+        .from('voting_sessions')
+        .update({
+          is_active: false,
+          has_ended: true,
+          time_remaining: 0
+        })
+        .eq('id', 'default');
+
+      if (error) throw error;
+
+      toast.info('Voting session ended!');
+      setTimeout(() => {
+        onShowLeaderboard();
+      }, 2000);
+    } catch (error) {
+      console.error('Error ending voting session:', error);
+    }
+  };
+
+  const onUpdateSession = async (updatedSession: VotingSession) => {
+    try {
+      const { error } = await supabase
+        .from('voting_sessions')
+        .update({
+          time_remaining: updatedSession.timeRemaining
+        })
+        .eq('id', 'default');
+
+      if (error) throw error;
+
+      setSession(updatedSession);
+    } catch (error) {
+      console.error('Error updating session:', error);
+    }
   };
 
   return (
@@ -133,7 +239,7 @@ const VotingPage = ({ user, ideas, onVote, onLogout, onShowLeaderboard }: Voting
               <VotingTimer 
                 session={session}
                 onTimerComplete={onTimerComplete}
-                onUpdateSession={setSession}
+                onUpdateSession={onUpdateSession}
               />
             </CardContent>
           </Card>
