@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -22,6 +21,7 @@ const VotingDashboard = ({ user, onLogout }: VotingDashboardProps) => {
       title: 'Mobile App for Team Collaboration',
       description: 'A mobile application that helps remote teams collaborate more effectively with real-time messaging and file sharing.',
       author: 'Alex Johnson',
+      authorId: 'user-1',
       votes: 12,
       voters: [],
       createdAt: new Date('2024-01-15'),
@@ -31,6 +31,7 @@ const VotingDashboard = ({ user, onLogout }: VotingDashboardProps) => {
       title: 'AI-Powered Code Review System',
       description: 'An intelligent system that automatically reviews code and provides suggestions for improvements and bug detection.',
       author: 'Sarah Chen',
+      authorId: 'user-2',
       votes: 8,
       voters: [],
       createdAt: new Date('2024-01-16'),
@@ -40,6 +41,7 @@ const VotingDashboard = ({ user, onLogout }: VotingDashboardProps) => {
       title: 'Sustainable Food Delivery Platform',
       description: 'A platform that connects users with local sustainable food producers and reduces packaging waste.',
       author: 'Mike Rodriguez',
+      authorId: 'user-3',
       votes: 15,
       voters: [],
       createdAt: new Date('2024-01-17'),
@@ -51,6 +53,7 @@ const VotingDashboard = ({ user, onLogout }: VotingDashboardProps) => {
     isActive: false,
     timeRemaining: 60,
     totalDuration: 60,
+    hasEnded: false,
   });
 
   const [showAddIdea, setShowAddIdea] = useState(false);
@@ -91,6 +94,7 @@ const VotingDashboard = ({ user, onLogout }: VotingDashboardProps) => {
       title,
       description,
       author: user.name,
+      authorId: user.id,
       votes: 0,
       voters: [],
       createdAt: new Date(),
@@ -106,7 +110,7 @@ const VotingDashboard = ({ user, onLogout }: VotingDashboardProps) => {
   };
 
   const onTimerComplete = () => {
-    setSession(prev => ({ ...prev, isActive: false }));
+    setSession(prev => ({ ...prev, isActive: false, hasEnded: true }));
     toast.info('Voting session ended!');
   };
 
